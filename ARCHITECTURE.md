@@ -60,16 +60,12 @@ flowchart TD
 | `src/popup/MainScreen.tsx` | Tela de coleta de mensagens e envio para Gemini |
 | `vite.config.ts` | Build do React para `dist/` |
 
-### Camada Vanilla (Legado)
+### Módulos Utilizados
 
 | Arquivo | Responsabilidade | Chrome APIs principais |
 |---------|------------------|------------------------|
 | `manifest.json` | Declaração da extensão | — |
-| `content.js` | Extração de mensagens + MutationObserver | `runtime.onMessage` |
-| `api.js` | Comunicação com Gemini | `storage` |
-| `prompts.js` | Templates de prompt | — |
-| `storage.js` | Wrapper `chrome.storage.local` | `storage` |
-| `background.js` | Service Worker mínimo | `runtime` |
+| `content.js` | Extração de mensagens da página | `runtime.onMessage` |
 
 ## Fluxo de Comunicação Detalhado
 

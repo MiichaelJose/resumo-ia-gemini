@@ -25,19 +25,17 @@ puglin-summary-called-grok4.3/
 │   ├── popup.html              # Entry point do popup React
 │   └── popup/                  # Componentes React
 │       ├── App.tsx
+│       ├── MainScreen.tsx
 │       ├── main.tsx
 │       └── index.css
 ├── dist/                       # Build gerado (não versionar)
 ├── manifest.json
 ├── vite.config.ts
 ├── package.json
-├── content.js
-├── background.js
-├── api.js
-├── prompts.js
-├── storage.js
+├── content.js                  # Content Script (usado pela tela principal)
 ├── icons/
 ├── README.md
+├── COMMITS.md
 ├── PROMPT.md
 ├── TESTING.md
 └── ARCHITECTURE.md
