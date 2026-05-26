@@ -35,10 +35,11 @@ puglin-summary-called-grok4.3/
 ├── content.js                  # Content Script (usado pela tela principal)
 ├── icons/
 ├── README.md
-├── COMMITS.md
-├── PROMPT.md
-├── TESTING.md
-└── ARCHITECTURE.md
+└── docs/
+    ├── PROMPT.md
+    ├── ARCHITECTURE.md
+    ├── TESTING.md
+    └── COMMITS.md
 ```
 
 > **Nota**: A interface principal agora é React + Tailwind + Framer Motion (em `src/popup/`). Os arquivos antigos (`popup.html`, `popup.js`) ainda existem por compatibilidade, mas a versão recomendada é a React.
@@ -177,14 +178,14 @@ flowchart TD
 6. `api.js` faz a chamada com retry automático e timeout
 7. Resposta é exibida e salva para uso posterior
 
-Para detalhes técnicos completos, consulte o arquivo **`ARCHITECTURE.md`**.
+Para detalhes técnicos completos, consulte o arquivo **`docs/ARCHITECTURE.md`**.
 
 ## 📚 Documentação Complementar
 
-- **`PROMPT.md`** — Explicação completa do prompt das 9 seções + 2 exemplos reais de input/output
-- **`TESTING.md`** — Guia detalhado de testes manuais (10 casos de teste com passos e referências ao código)
-- **`ARCHITECTURE.md`** — Diagrama de arquitetura, responsabilidades de cada módulo e decisões técnicas
+- **`docs/PROMPT.md`** — Explicação completa do prompt das 9 seções + 2 exemplos reais de input/output
+- **`docs/TESTING.md`** — Guia detalhado de testes manuais (10 casos de teste com passos e referências ao código)
 
+- **`docs/ARCHITECTURE.md`** — Diagrama de arquitetura, responsabilidades de cada módulo e decisões técnicas
 ## 🛡️ Segurança - API Key
 
 **Nunca** deixe a API Key hardcoded no código.
@@ -211,7 +212,7 @@ Soluções recomendadas:
 
 Para uma bateria completa e sistemática de testes manuais (incluindo todos os cenários de erro, logs esperados e referências de código), leia o arquivo:
 
-📄 **`TESTING.md`** — 10 casos de teste detalhados com passos, resultados esperados e dicas de debug.
+📄 **`docs/TESTING.md`** — 10 casos de teste detalhados com passos, resultados esperados e dicas de debug.
 
 ## ⚠️ Limitações Conhecidas
 
@@ -222,7 +223,7 @@ Para uma bateria completa e sistemática de testes manuais (incluindo todos os c
 - O fetch para o Gemini é feito no contexto do popup (se o popup for fechado durante o processamento, a requisição é cancelada).
 - O content script só é injetado automaticamente nas hosts declaradas no manifest.
 
-Para explicação técnica detalhada, consulte **`ARCHITECTURE.md`**.
+Para explicação técnica detalhada, consulte **`docs/ARCHITECTURE.md`**.
 
 ## 📦 Publicação no Chrome Web Store (Futuro)
 
@@ -244,7 +245,7 @@ Todos os módulos possuem logs no console com prefixo claro:
 
 **Dica**: Sempre abra o DevTools do popup (botão direito no popup → Inspecionar) para ver os logs durante os testes.
 
-Consulte também a seção de debug em **`TESTING.md`**.
+Consulte também a seção de debug em **`docs/TESTING.md`**.
 
 ---
 
@@ -252,6 +253,7 @@ Consulte também a seção de debug em **`TESTING.md`**.
 
 **Documentação principal**:
 - `README.md` (este arquivo)
-- `PROMPT.md`
-- `TESTING.md`
-- `ARCHITECTURE.md`
+- `docs/PROMPT.md`
+- `docs/TESTING.md`
+- `docs/ARCHITECTURE.md`
+- `docs/COMMITS.md`
