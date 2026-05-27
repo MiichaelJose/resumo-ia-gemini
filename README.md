@@ -1,6 +1,6 @@
-# 🚀 Extensão Chrome - Resumo IA para Digisac & WhatsApp Web
+# 🚀 TicketBoost - Extensão Chrome
 
-Extensão profissional Manifest V3 para captura de atendimentos de suporte (Digisac / WhatsApp Web), envio para Gemini e geração de resumos técnicos padronizados para sistemas de chamados (GLPI, Jira, TomTicket, etc).
+Extensão profissional Manifest V3 que captura mensagens, otimiza com dados relevantes e agiliza a abertura de chamados com IA. Ideal para times de suporte que utilizam sistemas como GLPI, Jira, TomTicket e Service Desk.
 
 ## 📑 Sumário
 

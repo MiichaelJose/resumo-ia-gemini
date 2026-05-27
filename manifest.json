@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Resumo IA - Digisac & WhatsApp",
+  "name": "TicketBoost",
   "version": "1.0.0",
-  "description": "Extensão para capturar conversas de Digisac e WhatsApp Web, enviar para Gemini e gerar resumos estruturados.",
+  "description": "Extensão que captura mensagens, otimiza com dados relevantes e agiliza a abertura de chamados com IA.",
   "permissions": [
     "storage",
     "activeTab",
