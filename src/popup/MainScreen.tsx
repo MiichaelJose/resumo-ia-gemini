@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 
 interface Message {
   id: number
@@ -15,8 +15,9 @@ export default function MainScreen({ onLogout }: MainScreenProps) {
   const [isSending, setIsSending] = useState(false)
   const [result, setResult] = useState('')
   const [status, setStatus] = useState('')
+  const [ticketFormUrl, setTicketFormUrl] = useState('')
 
-  const collectMessages = async () => {
+  const collectMessages = useCallback(async () => {
     setIsCollecting(true)
     setStatus('Coletando mensagens...')
 
@@ -45,9 +46,9 @@ export default function MainScreen({ onLogout }: MainScreenProps) {
     } finally {
       setIsCollecting(false)
     }
-  }
+  }, [])
 
-  const sendToGemini = async () => {
+  const sendToGemini = useCallback(async () => {
     if (messages.length === 0) {
       setStatus('Nenhuma mensagem coletada')
       return
@@ -115,7 +116,7 @@ ${conversationText}`
     } finally {
       setIsSending(false)
     }
-  }
+  }, [messages])
 
   const copyResult = async () => {
     if (!result) return
@@ -129,6 +130,60 @@ ${conversationText}`
     setResult('')
     setStatus('')
     chrome.storage.local.remove(['collectedMessages', 'lastSummary'])
+  }
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl + C → Coletar mensagens
+      if (e.ctrlKey && e.key.toLowerCase() === 'c') {
+        if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+          return
+        }
+        e.preventDefault()
+        if (!isCollecting) {
+          collectMessages()
+        }
+      }
+
+      // Enter → Enviar para Gemini
+      if (e.key === 'Enter') {
+        if (!isSending && messages.length > 0) {
+          e.preventDefault()
+          sendToGemini()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isCollecting, isSending, messages.length, collectMessages, sendToGemini])
+
+  // Carrega URL do formulário de chamado
+  useEffect(() => {
+    chrome.storage.local.get(['ticketFormUrl'], (result) => {
+      if (result.ticketFormUrl) {
+        setTicketFormUrl(result.ticketFormUrl)
+      }
+    })
+  }, [])
+
+  const sendToTicketSystem = async () => {
+    if (!result) return
+
+    // Copia para área de transferência
+    await navigator.clipboard.writeText(result)
+    setStatus('Resumo copiado!')
+
+    // Abre o formulário em nova aba (se URL configurada)
+    if (ticketFormUrl) {
+      chrome.tabs.create({ url: ticketFormUrl })
+      setStatus('Resumo copiado e formulário aberto!')
+    } else {
+      setStatus('Resumo copiado. Configure a URL do formulário nas configurações.')
+    }
+
+    setTimeout(() => setStatus(''), 3000)
   }
 
   return (
@@ -174,17 +229,42 @@ ${conversationText}`
         {messages.length} mensagens coletadas
       </div>
 
+      {/* Configuração de URL do formulário */}
+      <div className="mt-4">
+        <label className="block text-xs text-white/50 mb-1">URL do formulário de chamado</label>
+        <input
+          type="text"
+          value={ticketFormUrl}
+          onChange={(e) => {
+            const url = e.target.value
+            setTicketFormUrl(url)
+            chrome.storage.local.set({ ticketFormUrl: url })
+          }}
+          placeholder="https://seu-sistema.com/novo-chamado"
+          className="w-full h-9 bg-black/40 border border-white/10 rounded-lg px-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-white/30 transition-colors font-mono"
+        />
+        <p className="text-[10px] text-white/40 mt-1">Deixe em branco para apenas copiar o resumo.</p>
+      </div>
+
       {/* Resultado */}
       {result && (
         <div className="mt-6">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-white/80">Resumo Gerado</span>
-            <button 
-              onClick={copyResult}
-              className="text-xs px-3 py-1 bg-white/10 rounded-lg hover:bg-white/20"
-            >
-              Copiar
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={copyResult}
+                className="text-xs px-3 py-1 bg-white/10 rounded-lg hover:bg-white/20"
+              >
+                Copiar
+              </button>
+              <button 
+                onClick={sendToTicketSystem}
+                className="text-xs px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500/30"
+              >
+                Enviar para chamado
+              </button>
+            </div>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-sm whitespace-pre-wrap max-h-[280px] overflow-y-auto">
             {result}
