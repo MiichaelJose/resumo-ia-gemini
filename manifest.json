@@ -15,7 +15,17 @@
     "https://generativelanguage.googleapis.com/*"
   ],
   "action": {
-    "default_popup": "dist/src/popup.html"
+    "default_popup": "dist/src/popup.html",
+    "default_icon": {
+      "16": "icons/logo.svg",
+      "48": "icons/logo.svg",
+      "128": "icons/logo.svg"
+    }
+  },
+  "icons": {
+    "16": "icons/logo.svg",
+    "48": "icons/logo.svg",
+    "128": "icons/logo.svg"
   },
   "content_scripts": [
     {
