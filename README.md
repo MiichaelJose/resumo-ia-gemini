@@ -53,6 +53,8 @@ puglin-summary-called-grok4.3/
 - ✅ Integração Gemini 2.5 Flash
 - ✅ Prompt padrão para resumo de chamados de suporte (formato corporativo para GLPI, Jira, TomTicket etc)
 - ✅ Botão copiar resposta
+- ✅ Botão "Enviar para chamado" (copia resumo + abre formulário configurável)
+- ✅ Configuração de URL do formulário de chamado
 - ✅ Sistema de logs e tratamento de erros
 - ✅ Timeout de requisições + retry com backoff
 - ✅ Tratamento de limite de tokens

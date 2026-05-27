@@ -13,6 +13,7 @@ A extensão segue o modelo **Manifest V3** com Service Worker (background.js) m�
 - Comunicação assíncrona via `chrome.runtime` messaging
 - Tratamento robusto de erros e retry na camada de API
 - Armazenamento local simples via `chrome.storage.local`
+- Integração com sistemas de chamados via URL configurável + clipboard (sem preenchimento automático por enquanto)
 
 ## Diagrama de Fluxo Principal
 
@@ -169,3 +170,11 @@ Futuramente recomenda-se criar `options.html` + `options.js` com formulário bon
 ---
 
 **Resumo**: A arquitetura é simples, modular e fácil de manter. O ponto mais frágil atualmente é a extração de texto via DOM (seletores) e o armazenamento da API Key em local storage.
+
+## Integração com Sistemas de Chamados (Atual)
+
+- Botão "Enviar para chamado" em `MainScreen.tsx`
+- Fluxo: copia o resumo para `navigator.clipboard` + abre a URL configurada em nova aba via `chrome.tabs.create`
+- URL do formulário é armazenada em `chrome.storage.local` sob a chave `ticketFormUrl`
+- **Sem preenchimento automático de campos** (evita dependência de seletores CSS frágil por enquanto)
+- Futuro: quando necessário, evoluir para mapeamento de campos por sistema (GLPI, Jira, etc.)
