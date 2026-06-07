@@ -27,6 +27,8 @@ puglin-summary-called-grok4.3/
 │       ├── App.tsx
 │       ├── MainScreen.tsx
 │       ├── main.tsx
+│       ├── services/             # Storage, abas Chrome e Gemini
+│       ├── types.ts              # Tipos compartilhados
 │       └── index.css
 ├── dist/                       # Build gerado (não versionar)
 ├── manifest.json
@@ -42,22 +44,21 @@ puglin-summary-called-grok4.3/
     └── COMMITS.md
 ```
 
-> **Nota**: A interface principal agora é React + Tailwind + Framer Motion (em `src/popup/`). Os arquivos antigos (`popup.html`, `popup.js`) ainda existem por compatibilidade, mas a versão recomendada é a React.
+> **Nota**: A interface principal é React + Tailwind + Framer Motion (em `src/popup/`), com serviços separados para integração Chrome, storage e Gemini.
 
 ## ✅ Funcionalidades Implementadas
 
 - ✅ Captura de mensagens com `querySelector` + `MutationObserver`
 - ✅ Limpeza automática de texto e remoção de duplicatas
-- ✅ Botão "Coletar Dados" com feedback visual
-- ✅ Botão "Enviar para IA" com loading e retry automático
+- ✅ Botão "Coletar Mensagens" com feedback visual
+- ✅ Botão "Enviar para IA" com loading e tratamento de erro
 - ✅ Integração Gemini 2.5 Flash
 - ✅ Prompt padrão para resumo de chamados de suporte (formato corporativo para GLPI, Jira, TomTicket etc)
 - ✅ Botão copiar resposta
 - ✅ Botão "Enviar para chamado" (copia resumo + abre formulário configurável)
 - ✅ Configuração de URL do formulário de chamado
 - ✅ Sistema de logs e tratamento de erros
-- ✅ Timeout de requisições + retry com backoff
-- ✅ Tratamento de limite de tokens
+- ✅ Chamada ao Gemini centralizada em serviço dedicado
 - ✅ Design moderno e responsivo
 
 ## 🔧 Instalação e Desenvolvimento
@@ -82,7 +83,7 @@ Após o build, carregue a extensão:
 3. Clique em **"Carregar sem compactação"**
 4. Selecione a pasta raiz do projeto
 
-O popup agora usa a interface React moderna (`dist/popup/index.html`).
+O popup usa a interface React gerada em `dist/src/popup.html`.
 
 **Dica importante:**  
 Sempre rode `npm run build` após alterações no React para atualizar a pasta `dist/`.
@@ -103,13 +104,13 @@ A extensão agora possui uma interface React unificada com tela de conexão e te
 
 ### 3. Configurar a API Key na extensão
 
-Atualmente a chave é armazenada via `chrome.storage.local`.
+Atualmente a chave é configurada na própria tela de conexão e armazenada via `chrome.storage.local`.
 
 **Opção recomendada para desenvolvimento:**
-- Abra o DevTools do popup → Console
-- Execute:
+- Informe a API Key no popup.
+- Se precisar preparar via DevTools do popup → Console, execute:
   ```js
-  chrome.storage.local.set({ geminiApiKey: 'SUA_CHAVE_AQUI' })
+  chrome.storage.local.set({ geminiAuth: { type: 'apikey', key: 'SUA_CHAVE_AQUI' } })
   ```
 
 **Futuramente (produção):**
@@ -128,12 +129,12 @@ Atualmente a chave é armazenada via `chrome.storage.local`.
 
 1. Abra uma conversa no **Digisac** ou **WhatsApp Web**
 2. Clique no ícone da extensão
-3. Clique em **📥 Coletar Dados**
+3. Clique em **📥 Coletar Mensagens**
 4. Aguarde a contagem de mensagens
 5. Clique em **🚀 Enviar para IA**
 6. Aguarde o processamento (pode levar 5-15s)
 7. Leia o resumo estruturado
-8. Clique em **📋 Copiar Resposta**
+8. Clique em **Copiar** ou **Enviar para chamado**
 
 ## 🔄 Como Funciona (Arquitetura)
 
@@ -143,28 +144,28 @@ flowchart TD
         U[Abre popup na conversa Digisac/WA]
     end
 
-    U -->|1. Verifica página ativa| P[payload.js: checkCurrentPage]
-    P -->|Página suportada| C[Clique "Coletar Dados"]
+    U -->|1. Abre o popup React| P[App.tsx]
+    P -->|Autenticado| C[Clique "Coletar Mensagens"]
     
     C -->|2. chrome.tabs.sendMessage| CS[content.js: collectMessages]
     CS --> E[extractMessages + cleanText + dedup via Set]
-    E -->|3. Retorna array de mensagens| P2[payload.js]
+    E -->|3. Retorna array de mensagens| P2[MainScreen.tsx]
     
-    P2 -->|4. Salva| S[storage.js: saveData]
+    P2 -->|4. Salva| S[services/storage.ts]
     S --> UI[Atualiza contador na interface]
     
     UI --> H[Clique "Enviar para IA"]
     
-    H -->|5. Monta texto numerado| A[payload.js:140-143]
-    A -->|6. Gera prompt| PR[prompts.js: generatePrompt]
+    H -->|5. Monta texto numerado| A[services/gemini.ts]
+    A -->|6. Gera prompt| PR[buildSummaryPrompt]
     
-    PR -->|7. Chama com retry| API[api.js: sendToGemini]
-    API -->|8. POST fetch com timeout| G[Gemini 2.5 Flash<br/>generativelanguage.googleapis.com]
+    PR -->|7. Chama Gemini| API[generateGeminiSummary]
+    API -->|8. POST fetch| G[Gemini 2.5 Flash<br/>generativelanguage.googleapis.com]
     
     G -->|Sucesso| R[Exibe resposta formatada]
-    R -->|9. Persiste| SR[storage.js: saveResponse]
+    R -->|9. Persiste| SR[services/storage.ts]
     
-    G -->|Erro 429 / token / rede| ERR[showStatus com mensagem amigável<br/>api.js:82-125]
+    G -->|Erro token / rede / resposta inválida| ERR[status amigável no popup]
     
     style U fill:#e0f2fe
     style G fill:#fef3c7
@@ -172,19 +173,19 @@ flowchart TD
 ```
 
 **Resumo do fluxo**:
-1. Usuário clica em "Coletar Dados"
+1. Usuário clica em "Coletar Mensagens"
 2. Popup envia mensagem para o content script da aba ativa
 3. Content script extrai, limpa e deduplica mensagens do DOM
 4. Dados são salvos em `chrome.storage.local`
 5. Ao clicar "Enviar para IA", o popup monta o prompt estruturado
-6. `api.js` faz a chamada com retry automático e timeout
+6. `services/gemini.ts` faz a chamada ao Gemini
 7. Resposta é exibida e salva para uso posterior
 
 Para detalhes técnicos completos, consulte o arquivo **`docs/ARCHITECTURE.md`**.
 
 ## 📚 Documentação Complementar
 
-- **`docs/PROMPT.md`** — Explicação completa do prompt das 9 seções + 2 exemplos reais de input/output
+- **`docs/PROMPT.md`** — Explicação completa do prompt técnico de suporte + exemplos reais de input/output
 - **`docs/TESTING.md`** — Guia detalhado de testes manuais (10 casos de teste com passos e referências ao código)
 
 - **`docs/ARCHITECTURE.md`** — Diagrama de arquitetura, responsabilidades de cada módulo e decisões técnicas
@@ -241,8 +242,8 @@ Todos os módulos possuem logs no console com prefixo claro:
 
 - `[Content]` — extração de mensagens e MutationObserver
 - `[Popup]` — fluxo da interface e chamadas
-- `[API]` — tentativas de requisição, erros e retry
-- `[Storage]` — operações de leitura/escrita
+- Serviço Gemini — chamada centralizada em `src/popup/services/gemini.ts`
+- Serviço Storage — leitura/escrita centralizada em `src/popup/services/storage.ts`
 - `[Background]` — eventos do service worker
 
 **Dica**: Sempre abra o DevTools do popup (botão direito no popup → Inspecionar) para ver os logs durante os testes.
@@ -251,7 +252,7 @@ Consulte também a seção de debug em **`docs/TESTING.md`**.
 
 ---
 
-**Desenvolvido com JavaScript puro • Manifest V3 • Gemini 2.5 Flash**
+**Desenvolvido com React + TypeScript • Manifest V3 • Gemini 2.5 Flash**
 
 **Documentação principal**:
 - `README.md` (este arquivo)

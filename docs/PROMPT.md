@@ -16,7 +16,7 @@ O resumo segue rigorosamente um formato corporativo, sem emojis, sem linguagem i
 
 ## Prompt Estruturado Principal (Padrão)
 
-O prompt atual está definido em `prompts.js` (variável `structuredPrompt`).
+O prompt atual está definido em `src/popup/services/gemini.ts`, na função que monta o prompt enviado ao Gemini.
 
 Ele foi atualizado para o seguinte prompt padrão de **Resumo de Chamados de Suporte**:
 
@@ -25,7 +25,7 @@ Ele foi atualizado para o seguinte prompt padrão de **Resumo de Chamados de Sup
 
 Você é um analista responsável por gerar resumos técnicos e organizados de atendimentos de suporte...
 
-[Regras obrigatórias + Estrutura completa conforme definido no arquivo prompts.js]
+[Regras obrigatórias + conversa coletada pelo content script]
 ```
 
 O prompt força a IA a produzir a saída exatamente no formato corporativo exigido, com as seções:
@@ -48,7 +48,7 @@ O prompt força a IA a produzir a saída exatamente no formato corporativo exigi
 
 ## Prompt Alternativo (Conciso)
 
-Existe também uma versão mais curta em `prompts.js` (útil para atendimentos rápidos).
+No momento existe um prompt padrão único. Se for necessário criar versões alternativas, concentre essa lógica em `src/popup/services/gemini.ts`.
 
 ## Como o Prompt é Montado no Código
 
@@ -56,77 +56,54 @@ Fluxo completo:
 
 1. Mensagens são coletadas pelo content script (`content.js`)
 2. Cada mensagem é limpa e truncada (`content.js`)
-3. O texto é formatado como lista numerada e injetado no placeholder `{{CONVERSA}}`
-4. `Prompts.generatePrompt()` monta o prompt completo
-5. `API.sendToGemini()` envia para o Gemini
+3. `services/gemini.ts` formata o texto como lista numerada
+4. `buildSummaryPrompt()` monta o prompt completo
+5. `generateGeminiSummary()` envia para o Gemini
 
 O prompt atual é bem mais longo e detalhado que versões anteriores, por isso recomenda-se não coletar conversas excessivamente longas para evitar estouro de tokens.
 
 ## Parâmetros da Chamada Gemini
 
-```js
-generationConfig: {
-  temperature: 0.2,        // Valor baixo para maior consistência e aderência à estrutura
-  topK: 40,
-  topP: 0.9,
-  maxOutputTokens: 2048
-}
-```
+Atualmente a chamada usa a configuração padrão do modelo `gemini-2.5-flash`, envia `contents` com o texto do prompt e aplica timeout de 30 segundos.
 
-**Recomendação**: Mantenha a temperatura baixa (0.2 ~ 0.3) para o modelo respeitar melhor a estrutura rígida exigida.
+**Recomendação**: se precisar controlar consistência ou tamanho da resposta, adicione `generationConfig` em `src/popup/services/gemini.ts` mantendo temperatura baixa (0.2 ~ 0.3).
 
 ## Exemplos Práticos
 
-### Exemplo 1 – Site para Loja de Roupas
+### Exemplo 1 – Atendimento de suporte
 
 **Conversa de entrada (simplificada):**
 
 ```
-[1] Boa tarde! Preciso de um site para minha loja de roupas femininas.
-[2] Quero que tenha catálogo de produtos e o cliente consiga comprar pelo WhatsApp.
-[3] Também preciso de integração com o estoque que já uso no Excel.
-[4] O site tem que ser rápido no celular.
-[5] Quanto tempo mais ou menos para ficar pronto?
-[6] E se der problema com o pagamento, tem como colocar Pix também?
+[1] Loja 123 com problema no fechamento do caixa.
+[2] O terminal 02 apresenta divergência no valor final.
+[3] Foi enviado print do relatório e o pedido 98765 aparece duplicado.
+[4] Orientamos reprocessar o fechamento após excluir a duplicidade.
 ```
 
 **Saída esperada da IA:**
 
 ```
-1. Resumo geral do projeto/conversa
-Cliente deseja um e-commerce simples para loja de roupas femininas com foco em vendas via WhatsApp e integração básica de estoque.
+### Dados da Loja/Cliente
+Loja 123. Terminal 02.
 
-2. Objetivo do cliente
-Aumentar vendas online e facilitar o processo de compra diretamente pelo WhatsApp.
+### Problema Relatado
+Divergência no valor final do fechamento de caixa.
 
-3. Funcionalidades solicitadas
-- Catálogo de produtos
-- Compra via WhatsApp
-- Integração com estoque (Excel)
-- Versão mobile otimizada
-- Pagamento via Pix
+### Análise Realizada
+Foi identificado que o pedido 98765 aparece duplicado no relatório enviado pelo cliente.
 
-4. Tecnologias mencionadas
-Não mencionadas explicitamente (provável uso de WhatsApp Business API + planilha Excel).
+### Ações Executadas
+Cliente orientado a excluir a duplicidade e reprocessar o fechamento.
 
-5. Problemas identificados
-- Controle de estoque manual via Excel pode gerar inconsistências
-- Integração com meios de pagamento ainda indefinida
+### Evidências/Links Analisados
+Print do relatório mencionado na conversa. Link não informado.
 
-6. Pendências
-- Definir plataforma de e-commerce (Shopify, WooCommerce, custom)
-- Escolher gateway de pagamento
+### Orientações ao Cliente
+Reprocessar o fechamento após remover a duplicidade do pedido.
 
-7. Próximos passos
-- Reunião para definição de stack tecnológica
-- Levantamento de volume médio de produtos e pedidos
-
-8. Riscos do projeto
-- Integração manual com Excel pode não escalar
-- Dependência forte do WhatsApp (política de uso pode mudar)
-
-9. Estimativa técnica inicial
-Média complexidade (principalmente pela integração com estoque e WhatsApp).
+### Status Final
+Pendente de validação pelo cliente após reprocessamento.
 ```
 
 ### Exemplo 2 – Problema Técnico
@@ -134,22 +111,22 @@ Média complexidade (principalmente pela integração com estoque e WhatsApp).
 **Conversa curta:**
 
 ```
-[1] O sistema está muito lento depois que adicionamos 3 mil produtos.
-[2] O cliente reclama que as fotos demoram para carregar.
-[3] Queremos migrar para um servidor melhor ou usar CDN.
+[1] Cliente informa que o WhatsApp Web não carrega as mensagens do atendimento.
+[2] Após atualizar a página, a conversa voltou, mas algumas mensagens não aparecem.
+[3] Orientado limpar cache e testar novamente em janela anônima.
 ```
 
 **Saída esperada (resumida):**
 
 ```
-5. Problemas identificados
-Performance ruim após crescimento do catálogo (3 mil produtos). Carregamento lento de imagens.
+### Problema Relatado
+WhatsApp Web com falha no carregamento de mensagens do atendimento.
 
-8. Riscos do projeto
-Perda de conversão por lentidão. Possível necessidade de refatoração de infraestrutura.
+### Ações Executadas
+Cliente orientado a limpar cache e testar novamente em janela anônima.
 
-9. Estimativa técnica inicial
-Média a alta (depende se envolve migração de banco/imagens ou apenas CDN + otimização).
+### Status Final
+Em acompanhamento.
 ```
 
 ## Exemplo de Saída Esperada
@@ -195,8 +172,8 @@ Operação normalizada após fechamento/regularização dos caixas pelo portal.
 
 ## Como Personalizar o Prompt
 
-1. Edite o arquivo `prompts.js`
-2. Modifique o template `structuredPrompt`
+1. Edite o arquivo `src/popup/services/gemini.ts`
+2. Modifique a função que monta o prompt (`buildSummaryPrompt`)
 3. Recarregue a extensão em `chrome://extensions/`
 
 **Recomendação**: Mantenha a estrutura de seções definida, pois ela foi criada para ser compatível com os padrões de documentação de chamados da empresa.
@@ -212,6 +189,6 @@ Operação normalizada após fechamento/regularização dos caixas pelo portal.
 
 ---
 
-**Arquivo de referência**: `prompts.js`  
-**Chamado por**: `popup.js`  
-**Enviado para**: Gemini (modelo configurado em `api.js`)
+**Arquivo de referência**: `src/popup/services/gemini.ts`  
+**Chamado por**: `src/popup/MainScreen.tsx`  
+**Enviado para**: Gemini pelo serviço `src/popup/services/gemini.ts`

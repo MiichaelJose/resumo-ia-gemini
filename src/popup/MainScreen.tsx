@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
-
-interface Message {
-  id: number
-  text: string
-}
+import { collectMessagesFromActiveTab, getCollectMessagesErrorMessage, openTab } from './services/chromeTabs'
+import { generateGeminiSummary } from './services/gemini'
+import { getStoredValue, removeStoredValues, setStoredValues } from './services/storage'
+import type { Message } from './types'
 
 interface MainScreenProps {
   onLogout: () => void
@@ -17,32 +16,22 @@ export default function MainScreen({ onLogout }: MainScreenProps) {
   const [status, setStatus] = useState('')
   const [ticketFormUrl, setTicketFormUrl] = useState('')
 
+  const showTemporaryStatus = useCallback((message: string, timeout = 2000) => {
+    setStatus(message)
+    setTimeout(() => setStatus(''), timeout)
+  }, [])
+
   const collectMessages = useCallback(async () => {
     setIsCollecting(true)
     setStatus('Coletando mensagens...')
 
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      
-      if (!tab?.id) {
-        setStatus('Nenhuma aba ativa encontrada')
-        setIsCollecting(false)
-        return
-      }
-
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'collectMessages' })
-
-      if (response?.success) {
-        setMessages(response.messages || [])
-        setStatus(`${response.messages?.length || 0} mensagens coletadas`)
-        
-        // Salva no storage
-        chrome.storage.local.set({ collectedMessages: response.messages })
-      } else {
-        setStatus('Erro ao coletar mensagens')
-      }
+      const collectedMessages = await collectMessagesFromActiveTab()
+      setMessages(collectedMessages)
+      setStatus(`${collectedMessages.length} mensagens coletadas`)
+      setStoredValues({ collectedMessages })
     } catch (error) {
-      setStatus('Erro ao comunicar com a página')
+      setStatus(getCollectMessagesErrorMessage(error))
     } finally {
       setIsCollecting(false)
     }
@@ -58,61 +47,35 @@ export default function MainScreen({ onLogout }: MainScreenProps) {
     setStatus('Enviando para Gemini...')
 
     try {
-      // Recupera a chave
-      const auth = await chrome.storage.local.get(['geminiAuth'])
-      const authData = auth.geminiAuth
+      const authData = await getStoredValue('geminiAuth')
 
       if (!authData) {
         setStatus('Autenticação não encontrada')
-        setIsSending(false)
         return
       }
 
-      let apiKey = ''
       if (authData.type === 'apikey') {
-        apiKey = authData.key
-      } else {
-        setStatus('OAuth ainda não suportado na tela principal')
-        setIsSending(false)
-        return
-      }
-
-      // Monta o prompt
-      const conversationText = messages
-        .map((msg, i) => `[${i + 1}] ${msg.text}`)
-        .join('\n\n')
-
-      const prompt = `Analise a conversa abaixo e gere um resumo técnico estruturado.
-
-Conversa:
-${conversationText}`
-
-      // Chama a API do Gemini
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
-        }
-      )
-
-      const data = await response.json()
-
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const summary = data.candidates[0].content.parts[0].text
+        const summary = await generateGeminiSummary(messages, authData.key)
         setResult(summary)
         setStatus('Resumo gerado com sucesso!')
-        
-        // Salva o resultado
-        chrome.storage.local.set({ lastSummary: summary })
-      } else {
-        setStatus('Erro ao gerar resumo')
+        setStoredValues({ lastSummary: summary })
+      }
+
+      if (authData.type !== 'apikey') {
+        setStatus('OAuth ainda não suportado na tela principal')
       }
     } catch (error) {
-      setStatus('Erro na comunicação com a API')
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setStatus('Tempo limite ao comunicar com o Gemini')
+        return
+      }
+
+      if (error instanceof TypeError) {
+        setStatus('Erro de rede ao comunicar com o Gemini')
+        return
+      }
+
+      setStatus(error instanceof Error ? error.message : 'Erro na comunicação com a API')
     } finally {
       setIsSending(false)
     }
@@ -121,15 +84,14 @@ ${conversationText}`
   const copyResult = async () => {
     if (!result) return
     await navigator.clipboard.writeText(result)
-    setStatus('Copiado para a área de transferência!')
-    setTimeout(() => setStatus(''), 2000)
+    showTemporaryStatus('Copiado para a área de transferência!')
   }
 
   const clearAll = () => {
     setMessages([])
     setResult('')
     setStatus('')
-    chrome.storage.local.remove(['collectedMessages', 'lastSummary'])
+    removeStoredValues(['collectedMessages', 'lastSummary'])
   }
 
   // Atalhos de teclado
@@ -159,14 +121,31 @@ ${conversationText}`
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isCollecting, isSending, messages.length, collectMessages, sendToGemini])
 
-  // Carrega URL do formulário de chamado
+  // Carrega dados salvos do popup
   useEffect(() => {
-    chrome.storage.local.get(['ticketFormUrl'], (result) => {
-      if (result.ticketFormUrl) {
-        setTicketFormUrl(result.ticketFormUrl)
+    getStoredValue('collectedMessages').then((storedMessages) => {
+      if (storedMessages) {
+        setMessages(storedMessages)
+      }
+    })
+
+    getStoredValue('lastSummary').then((storedSummary) => {
+      if (storedSummary) {
+        setResult(storedSummary)
+      }
+    })
+
+    getStoredValue('ticketFormUrl').then((storedTicketFormUrl) => {
+      if (storedTicketFormUrl) {
+        setTicketFormUrl(storedTicketFormUrl)
       }
     })
   }, [])
+
+  const handleTicketFormUrlChange = (url: string) => {
+    setTicketFormUrl(url)
+    setStoredValues({ ticketFormUrl: url })
+  }
 
   const sendToTicketSystem = async () => {
     if (!result) return
@@ -177,13 +156,11 @@ ${conversationText}`
 
     // Abre o formulário em nova aba (se URL configurada)
     if (ticketFormUrl) {
-      chrome.tabs.create({ url: ticketFormUrl })
-      setStatus('Resumo copiado e formulário aberto!')
+      openTab(ticketFormUrl)
+      showTemporaryStatus('Resumo copiado e formulário aberto!', 3000)
     } else {
-      setStatus('Resumo copiado. Configure a URL do formulário nas configurações.')
+      showTemporaryStatus('Resumo copiado. Configure a URL do formulário nas configurações.', 3000)
     }
-
-    setTimeout(() => setStatus(''), 3000)
   }
 
   return (
@@ -235,11 +212,7 @@ ${conversationText}`
         <input
           type="text"
           value={ticketFormUrl}
-          onChange={(e) => {
-            const url = e.target.value
-            setTicketFormUrl(url)
-            chrome.storage.local.set({ ticketFormUrl: url })
-          }}
+          onChange={(e) => handleTicketFormUrlChange(e.target.value)}
           placeholder="https://seu-sistema.com/novo-chamado"
           className="w-full h-9 bg-black/40 border border-white/10 rounded-lg px-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-white/30 transition-colors font-mono"
         />

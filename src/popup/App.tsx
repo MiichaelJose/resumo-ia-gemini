@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Key, Settings, Shield } from 'lucide-react'
 import MainScreen from './MainScreen'
+import { getStoredValue, saveAuthError, setStoredValues } from './services/storage'
 
 interface ConnectionState {
   status: 'idle' | 'connecting' | 'connected' | 'error'
@@ -19,9 +20,9 @@ export default function GeminiApp() {
   const [showApiKey, setShowApiKey] = useState(false)
 
   // Verifica se já existe autenticação salva
-  React.useEffect(() => {
-    chrome.storage.local.get(['geminiAuth'], (result) => {
-      if (result.geminiAuth) {
+  useEffect(() => {
+    getStoredValue('geminiAuth').then((auth) => {
+      if (auth) {
         setView('main')
       }
       setIsCheckingAuth(false)
@@ -38,27 +39,26 @@ export default function GeminiApp() {
     if (!key.startsWith('AIza')) {
       const errorMsg = 'Formato de API Key inválido (deve começar com AIza)'
 
-      chrome.storage.local.set({
-        lastAuthError: {
-          type: 'apikey',
-          message: errorMsg,
-          timestamp: new Date().toISOString()
-        }
-      })
-
+      saveAuthError(errorMsg)
       setConnection({ status: 'error', message: errorMsg })
       return
     }
 
-    chrome.storage.local.set(
-      {
-        geminiAuth: { type: 'apikey', key }
-      },
-      () => {
-        setConnection({ status: 'connected' })
-        setTimeout(() => setView('main'), 800)
+    setStoredValues({ geminiAuth: { type: 'apikey', key } }).then(() => {
+      setConnection({ status: 'connected' })
+      setTimeout(() => setView('main'), 800)
+    })
+  }
+
+  const logLastAuthError = () => {
+    getStoredValue('lastAuthError').then((lastAuthError) => {
+      if (lastAuthError) {
+        console.log('%c[Gemini Auth Error]', 'color:#f87171', lastAuthError)
+        return
       }
-    )
+
+      console.log('%c[Gemini Auth] Nenhum erro registrado', 'color:#4ade80')
+    })
   }
 
   const resetState = () => {
@@ -93,15 +93,7 @@ export default function GeminiApp() {
         </div>
 
         <button
-          onClick={() => {
-            chrome.storage.local.get(['lastAuthError'], (result) => {
-              if (result.lastAuthError) {
-                console.log('%c[Gemini Auth Error]', 'color:#f87171', result.lastAuthError)
-              } else {
-                console.log('%c[Gemini Auth] Nenhum erro registrado', 'color:#4ade80')
-              }
-            })
-          }}
+          onClick={logLastAuthError}
           className="p-2 rounded-lg hover:bg-white/5 transition-colors"
           title="Ver último erro de autenticação no console"
         >
@@ -166,7 +158,7 @@ export default function GeminiApp() {
               >
                 Como obter minha key?
               </a>
-              <div className="text-white/40 flex items-center gap-1" title="Sua chave é armazenada localmente e criptografada.">
+              <div className="text-white/40 flex items-center gap-1" title="Sua chave é armazenada localmente no navegador.">
                 <Shield className="w-3 h-3" /> Seguro
               </div>
             </div>

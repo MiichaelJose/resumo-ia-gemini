@@ -5,6 +5,11 @@
 
   console.log('[Content] Content script carregado');
 
+  const IGNORED_TEXT_PARTS = ['menu', 'enviar', 'digite'];
+  const MAX_MESSAGE_LENGTH = 500;
+  const MAX_RAW_TEXT_LENGTH = 800;
+  const SHORT_UI_TEXT_LENGTH = 80;
+
   // Detecta qual plataforma está ativa
   function detectPlatform() {
     if (window.location.hostname.includes('digisac')) return 'digisac';
@@ -38,7 +43,46 @@
       .replace(/\s+/g, ' ')           // Remove espaços múltiplos
       .replace(/^\d{1,2}:\d{2}\s*/, '') // Remove timestamps no início
       .replace(/\s*\d{1,2}:\d{2}$/, '') // Remove timestamps no final
-      .substring(0, 500);             // Limita tamanho por mensagem
+      .substring(0, MAX_MESSAGE_LENGTH); // Limita tamanho por mensagem
+  }
+
+  function getMessageContainers(selectors) {
+    const platformContainers = document.querySelectorAll(selectors.messageBubble);
+
+    if (platformContainers.length > 0) {
+      return platformContainers;
+    }
+
+    return document.querySelectorAll('div[role="row"], .message, [class*="msg"]');
+  }
+
+  function isIgnoredText(text) {
+    const lowerText = text.toLowerCase();
+    const looksLikeUiText = lowerText.length <= SHORT_UI_TEXT_LENGTH && IGNORED_TEXT_PARTS.some((part) => lowerText.includes(part));
+
+    return lowerText.length > MAX_RAW_TEXT_LENGTH || looksLikeUiText;
+  }
+
+  function buildMessage(container, index, seenTexts) {
+    const text = container.innerText || container.textContent || '';
+
+    if (!text || text.length < 3 || isIgnoredText(text)) {
+      return null;
+    }
+
+    const cleaned = cleanText(text);
+
+    if (cleaned.length <= 2 || seenTexts.has(cleaned)) {
+      return null;
+    }
+
+    seenTexts.add(cleaned);
+
+    return {
+      id: index,
+      text: cleaned,
+      timestamp: new Date().toISOString()
+    };
   }
 
   // Extrai mensagens da página
@@ -48,38 +92,13 @@
     const seenTexts = new Set(); // Para evitar duplicatas
 
     try {
-      // Tenta múltiplos seletores
-      let containers = document.querySelectorAll(selectors.messageBubble);
-      
-      if (containers.length === 0) {
-        // Fallback: busca por elementos com texto longo
-        containers = document.querySelectorAll('div[role="row"], .message, [class*="msg"]');
-      }
+      const containers = getMessageContainers(selectors);
 
       containers.forEach((container, index) => {
-        // Ignora elementos que parecem menus ou botões
-        const text = container.innerText || container.textContent || '';
-        
-        if (!text || text.length < 3) return;
-        
-        // Ignora elementos irrelevantes
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('menu') || 
-            lowerText.includes('enviar') ||
-            lowerText.includes('digite') ||
-            lowerText.length > 800) {
-          return;
-        }
+        const message = buildMessage(container, index, seenTexts);
 
-        const cleaned = cleanText(text);
-        
-        if (cleaned.length > 2 && !seenTexts.has(cleaned)) {
-          seenTexts.add(cleaned);
-          messages.push({
-            id: index,
-            text: cleaned,
-            timestamp: new Date().toISOString()
-          });
+        if (message) {
+          messages.push(message);
         }
       });
 

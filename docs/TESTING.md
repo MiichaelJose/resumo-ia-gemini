@@ -39,29 +39,22 @@ Toda vez que você editar algum arquivo (`.js`, `.html`, `.css`, `manifest.json`
 
 ---
 
-### Erro Comum: "Could not load icon 'icons/icon16.png'"
+### Observação sobre ícones
 
-Este é o erro exato que você acabou de encontrar.
+O `manifest.json` referencia os arquivos `icons/icon16.png`, `icons/icon48.png` e `icons/icon128.png`. Eles precisam existir antes de carregar a extensão no Chrome.
 
-**Causa:**  
-O `manifest.json` estava referenciando arquivos de ícone (`icons/icon16.png`, etc.) que não existem na pasta `icons/`.
-
-**Solução aplicada agora:**
-- Removemos temporariamente as referências de ícones do `manifest.json`.
-- A extensão agora carrega normalmente usando o ícone padrão do Chrome (peça de quebra-cabeça).
-
-**Como adicionar ícones reais depois:**
+**Como substituir os ícones:**
 
 1. Crie ou baixe 3 ícones PNG:
    - `icons/icon16.png` (16×16)
    - `icons/icon48.png` (48×48)
    - `icons/icon128.png` (128×128)
 
-2. Adicione de volta no `manifest.json`:
+2. Mantenha o `manifest.json` apontando para o popup gerado pelo Vite e os ícones:
 
 ```json
 "action": {
-  "default_popup": "popup.html",
+  "default_popup": "dist/src/popup.html",
   "default_icon": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -93,10 +86,12 @@ Dica: Você pode gerar ícones simples gratuitamente em sites como:
 
 ## Como Configurar a API Key para Testes
 
-Abra o popup da extensão → clique com botão direito → Inspecionar → Console e execute:
+Abra o popup da extensão e informe a chave na tela **Conectar ao Gemini**.
+
+Para preparar o estado via console, use o formato atual do storage:
 
 ```js
-chrome.storage.local.set({ geminiApiKey: 'SUA_CHAVE_AQUI' })
+chrome.storage.local.set({ geminiAuth: { type: 'apikey', key: 'SUA_CHAVE_AQUI' } })
 ```
 
 Recarregue o popup após configurar.
@@ -118,7 +113,7 @@ Recarregue o popup após configurar.
 **Resultado esperado:**
 - A extensão aparece na lista de extensões
 - Não há erros vermelhos na página `chrome://extensions/`
-- O popup abre e mostra a mensagem "Verificando página..."
+- O popup abre e mostra a tela de conexão ou a tela principal, se já existir autenticação salva
 - O console do popup (botão direito → Inspecionar) não mostra erros críticos
 
 **Problemas comuns e soluções:**
@@ -127,29 +122,30 @@ Recarregue o popup após configurar.
 |----------|----------------|---------|
 | Botão "Carregar sem compactação" não aparece | Modo desenvolvedor desativado | Ative o toggle no canto superior direito |
 | Erro "Manifest file is missing or unreadable" | Selecionou a pasta errada | Selecione a pasta que contém o `manifest.json` (não uma subpasta) |
-| Ícone da extensão aparece quebrado / erro ao carregar | Referências a ícones no manifest.json apontam para arquivos que não existem | Solução aplicada: ícones foram removidos temporariamente do manifest. A extensão agora carrega com o ícone padrão do Chrome. |
-| Popup não abre ao clicar no ícone | Erro no `popup.html` ou scripts | Abra o console do popup e veja o erro |
+| Ícone da extensão aparece quebrado / erro ao carregar | Arquivos em `icons/` ausentes ou caminho incorreto no manifest | Confirme `icons/icon16.png`, `icons/icon48.png` e `icons/icon128.png` |
+| Popup não abre ao clicar no ícone | Build ausente ou erro no popup React | Rode `npm run build` e abra o console do popup |
 | Extensão some após recarregar o Chrome | Normal | Basta recarregar a extensão em `chrome://extensions/` |
 
 **Após modificar código:**
 - Sempre clique no botão de **recarregar** (⟳) na página `chrome://extensions/`
 - Feche e reabra o popup da extensão
 
-**Onde verificar no código:** `popup.js:249-258` (função `init`) e `manifest.json`
+**Onde verificar no código:** `src/popup/App.tsx`, `src/popup/MainScreen.tsx` e `manifest.json`
 
 ---
 
-### TC02 - Detecção de Página Suportada
+### TC02 - Coleta em Página Suportada
 
 **Passos:**
 1. Abra uma aba com `https://web.digisac.com.br`
 2. Abra o popup da extensão
+3. Clique em **📥 Coletar Mensagens**
 
 **Resultado esperado:**
-- Status mostra "✅ Página suportada: **Digisac**" com borda verde
-- O mesmo teste com WhatsApp Web deve mostrar "WhatsApp Web"
+- O status de coleta aparece no popup
+- O mesmo teste com WhatsApp Web deve conseguir coletar a conversa ativa
 
-**Onde verificar:** `popup.js:53-78`
+**Onde verificar:** `content.js` e `src/popup/services/chromeTabs.ts`
 
 ---
 
@@ -157,15 +153,15 @@ Recarregue o popup após configurar.
 
 **Passos:**
 1. Abra uma conversa com várias mensagens no Digisac ou WhatsApp
-2. Clique no botão **📥 Coletar Dados**
+2. Clique no botão **📥 Coletar Mensagens**
 
 **Resultado esperado:**
-- Botão fica em estado "Processando..."
-- Após alguns segundos aparece "✅ X mensagens coletadas com sucesso!"
+- Botão fica em estado "Coletando..."
+- Após alguns segundos aparece "X mensagens coletadas"
 - O contador de mensagens é atualizado
 - Botão "Enviar para IA" é habilitado
 
-**Onde verificar:** `popup.js:82-126` + `content.js:45-93`
+**Onde verificar:** `src/popup/MainScreen.tsx`, `src/popup/services/chromeTabs.ts` e `content.js`
 
 ---
 
@@ -173,7 +169,7 @@ Recarregue o popup após configurar.
 
 **Passos:**
 1. Colete mensagens de uma conversa
-2. Abra o Console do popup e observe os logs `[Content]`
+2. Abra o DevTools da aba do Digisac/WhatsApp e observe os logs `[Content]`
 
 **O que verificar nos logs:**
 - Mensagens com menos de 3 caracteres são ignoradas
@@ -181,7 +177,7 @@ Recarregue o popup após configurar.
 - Mensagens duplicadas não aparecem duas vezes
 - Cada mensagem é truncada em no máximo 500 caracteres
 
-**Onde verificar:** `content.js:33-42` e `content.js:65-72`
+**Onde verificar:** `content.js` (`cleanText`, `isIgnoredText` e `buildMessage`)
 
 ---
 
@@ -196,7 +192,7 @@ Recarregue o popup após configurar.
 - O contador de mensagens continua mostrando o mesmo número
 - Se já havia resposta da IA, ela continua visível
 
-**Onde verificar:** `popup.js:225-237` + `storage.js`
+**Onde verificar:** `src/popup/MainScreen.tsx` + `src/popup/services/storage.ts`
 
 ---
 
@@ -208,12 +204,12 @@ Recarregue o popup após configurar.
 3. Aguarde o processamento
 
 **Resultado esperado:**
-- Botão mostra "⏳ Processando..."
+- Botão mostra "Enviando para Gemini..."
 - Após 5-15 segundos o resumo aparece na área "Resumo Gerado"
 - Mensagem de sucesso verde é exibida
 - A resposta fica salva e aparece ao reabrir o popup
 
-**Onde verificar:** `popup.js:130-168` + `api.js:34-126`
+**Onde verificar:** `src/popup/MainScreen.tsx` + `src/popup/services/gemini.ts`
 
 ---
 
@@ -224,7 +220,7 @@ Execute cada sub-caso separadamente:
 **A. Sem API Key configurada**
 - Remova a chave do storage
 - Clique em Enviar para IA
-- Deve aparecer erro: "API Key do Gemini não configurada..."
+- Deve aparecer erro: "Autenticação não encontrada"
 
 **B. Chave inválida**
 - Coloque uma chave falsa
@@ -232,17 +228,17 @@ Execute cada sub-caso separadamente:
 
 **C. Sem internet**
 - Desconecte a internet ou use um bloqueador
-- Deve aparecer erro de timeout ou conexão
+- Deve aparecer erro de comunicação, rede ou resposta inválida
 
 **D. Rate limit (429)**
 - Faça várias requisições rápidas seguidas
-- Deve aparecer: "Limite de requisições atingido..."
+- Deve aparecer: "Limite de uso do Gemini atingido. Tente novamente mais tarde"
 
 **E. Texto muito longo (token limit)**
 - Colete 150+ mensagens longas
-- Deve aparecer erro sobre limite de tokens
+- Deve aparecer erro de comunicação com a API ou resposta inválida
 
-**Onde verificar:** `api.js:79-125` (bloco de retry e tratamento de erros)
+**Onde verificar:** `src/popup/services/gemini.ts` e tratamento de status em `src/popup/MainScreen.tsx`
 
 ---
 
@@ -252,36 +248,33 @@ Execute cada sub-caso separadamente:
 1. Tenha uma resposta gerada pela IA visível
 2. Teste cada botão:
 
-- **📋 Copiar Resposta** → Deve copiar o texto e mostrar feedback visual (texto muda para "✅ Copiado!")
-- **🗑️ Limpar** → Remove os dados, zera o contador e esconde a resposta
-- **⚙️ Ver Prompt Estruturado** → Abre um alert com o prompt atual
+- **Copiar** → copia o texto e mostra "Copiado para a área de transferência!"
+- **Enviar para chamado** → copia o resumo e abre a URL configurada, quando houver
+- **Limpar tudo** → remove os dados, zera o contador e esconde a resposta
 
-**Onde verificar:** `popup.js:172-221`
+**Onde verificar:** `src/popup/MainScreen.tsx`
 
 ---
 
 ### TC09 - Verificação de Logs no Console
 
-Com o DevTools do popup aberto, execute os fluxos de coleta e envio e confirme os seguintes prefixos aparecem:
+Com o DevTools aberto, execute os fluxos de coleta e envio e confirme os pontos de debug disponíveis:
 
-- `[Popup]`
 - `[Content]`
-- `[API]`
-- `[Storage]`
+- botão de engrenagem no popup para imprimir o último erro de autenticação
 
 Exemplos de logs importantes:
-- `[API] Tentativa 1/3`
 - `[Content] 47 mensagens extraídas`
-- `[Popup] Prompt gerado, enviando para API...`
+- `[Gemini Auth Error]` quando houver erro salvo
 
-**Onde verificar:** Todos os arquivos possuem `console.log` com prefixo de módulo.
+**Onde verificar:** `content.js` e `src/popup/App.tsx`.
 
 ---
 
 ### TC10 - Casos Extremos
 
 **Conversa vazia**
-- Clique em Coletar Dados em um chat sem mensagens
+- Clique em Coletar Mensagens em um chat sem mensagens
 - Deve mostrar quantidade 0 e manter botão Enviar desabilitado
 
 **Página não suportada**
@@ -314,8 +307,8 @@ Exemplos de logs importantes:
 | Popup não abre ou fica em branco | Abra o console do popup (botão direito no popup → Inspecionar) |
 | Nenhuma mensagem é coletada | `content.js:52-57` (seletores) + inspecione o DOM da página |
 | Erro ao injetar script | Console da aba (não do popup) |
-| Resposta da IA vem truncada | `api.js:55` (maxOutputTokens) |
-| Dados somem ao fechar popup | `storage.js` (verificar se `saveData` foi chamado) |
+| Resposta da IA vem truncada | `src/popup/services/gemini.ts` (adicionar `generationConfig` se necessário) |
+| Dados somem ao fechar popup | `src/popup/services/storage.ts` (verificar gravação de `collectedMessages`/`lastSummary`) |
 | Muitas mensagens irrelevantes | `content.js:65-72` (filtros de limpeza) |
 
 ---
@@ -330,9 +323,9 @@ Exemplos de logs importantes:
 
 **Referência principal de código:**
 - Coleta → `content.js`
-- UI e orquestração → `popup.js`
-- Comunicação com IA → `api.js`
-- Armazenamento → `storage.js`
-- Prompts → `prompts.js`
+- UI e orquestração → `src/popup/App.tsx` e `src/popup/MainScreen.tsx`
+- Comunicação com IA → `src/popup/services/gemini.ts`
+- Armazenamento → `src/popup/services/storage.ts`
+- Prompts → `src/popup/services/gemini.ts`
 
 Boa sorte nos testes!

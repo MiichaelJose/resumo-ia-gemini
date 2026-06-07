@@ -11,7 +11,7 @@ A extensão segue o modelo **Manifest V3** com Service Worker (background.js) m�
 - **Nova interface**: React + Tailwind + Framer Motion (em `src/popup/`)
 - Separação clara de responsabilidades
 - Comunicação assíncrona via `chrome.runtime` messaging
-- Tratamento robusto de erros e retry na camada de API
+- Tratamento centralizado de erros na camada de serviço do Gemini
 - Armazenamento local simples via `chrome.storage.local`
 - Integração com sistemas de chamados via URL configurável + clipboard (sem preenchimento automático por enquanto)
 
@@ -23,28 +23,28 @@ flowchart TD
         U[Abre popup na conversa Digisac/WA]
     end
 
-    U -->|1. Verifica página ativa| P[payload.js: checkCurrentPage]
-    P -->|Página suportada| C[Clique "Coletar Dados"]
+    U -->|1. Abre o popup React| P[App.tsx]
+    P -->|Autenticado| C[Clique "Coletar Mensagens"]
     
     C -->|2. chrome.tabs.sendMessage| CS[content.js: collectMessages]
     CS --> E[extractMessages + cleanText + dedup via Set]
-    E -->|3. Retorna array de mensagens| P2[payload.js]
+    E -->|3. Retorna array de mensagens| P2[MainScreen.tsx]
     
-    P2 -->|4. Salva| S[storage.js: saveData]
+    P2 -->|4. Salva| S[services/storage.ts]
     S --> UI[Atualiza contador na interface]
     
     UI --> H[Clique "Enviar para IA"]
     
-    H -->|5. Monta texto numerado| A[payload.js:140-143]
-    A -->|6. Gera prompt| PR[prompts.js: generatePrompt]
+    H -->|5. Monta texto numerado| A[services/gemini.ts]
+    A -->|6. Gera prompt| PR[buildSummaryPrompt]
     
-    PR -->|7. Chama com retry| API[api.js: sendToGemini]
-    API -->|8. POST fetch com timeout| G[Gemini 2.5 Flash<br/>generativelanguage.googleapis.com]
+    PR -->|7. Chama Gemini| API[generateGeminiSummary]
+    API -->|8. POST fetch| G[Gemini 2.5 Flash<br/>generativelanguage.googleapis.com]
     
     G -->|Sucesso| R[Exibe resposta formatada]
-    R -->|9. Persiste| SR[storage.js: saveResponse]
+    R -->|9. Persiste| SR[services/storage.ts]
     
-    G -->|Erro 429 / token / rede| ERR[showStatus com mensagem amigável<br/>api.js:82-125]
+    G -->|Erro token / rede / resposta inválida| ERR[status amigável no popup]
     
     style U fill:#e0f2fe
     style G fill:#fef3c7
@@ -59,6 +59,10 @@ flowchart TD
 |---------|------------------|
 | `src/popup/App.tsx` | App principal com duas views (conexão + análise) |
 | `src/popup/MainScreen.tsx` | Tela de coleta de mensagens e envio para Gemini |
+| `src/popup/services/chromeTabs.ts` | Comunicação com aba ativa e abertura de novas abas |
+| `src/popup/services/gemini.ts` | Montagem do prompt e chamada ao Gemini |
+| `src/popup/services/storage.ts` | Acesso tipado ao `chrome.storage.local` |
+| `src/popup/types.ts` | Tipos compartilhados do popup |
 | `vite.config.ts` | Build do React para `dist/` |
 
 ### Módulos Utilizados
@@ -73,7 +77,8 @@ flowchart TD
 ### 1. Coleta de Dados (On-demand)
 
 ```
-popup.js
+MainScreen.tsx
+  └── collectMessagesFromActiveTab()
   └── chrome.tabs.sendMessage(tabId, { action: 'collectMessages' })
         └── content.js
               └── extractMessages()
@@ -87,24 +92,24 @@ popup.js
 ### 2. Envio para IA
 
 ```
-popup.js:140
-  └── Monta string numerada a partir das mensagens
-  └── Prompts.generatePrompt(texto, 'structured')
-  └── API.sendToGemini(prompt)
-        └── (dentro de api.js)
-              └── 3 tentativas com backoff
-              └── AbortController + timeout de 30s
-              └── fetch POST para Gemini
-              └── Tratamento específico de 429 e erros de token
+MainScreen.tsx
+  └── generateGeminiSummary(messages, apiKey)
+        └── services/gemini.ts
+              └── Monta string numerada a partir das mensagens
+              └── Gera prompt técnico estruturado
+              └── fetch POST para Gemini 2.5 Flash com timeout
+              └── Extrai o texto da resposta ou retorna erro amigável por status HTTP
 ```
 
 ### 3. Armazenamento
 
 Todos os dados são salvos em `chrome.storage.local`:
 
-- `collectedData`: array de mensagens
-- `lastResponse`: último resumo gerado pela IA
-- `geminiApiKey`: chave da API (armazenada pelo usuário manualmente)
+- `collectedMessages`: array de mensagens
+- `lastSummary`: último resumo gerado pela IA
+- `geminiAuth`: autenticação do Gemini (`type: "apikey"`, `key`)
+- `lastAuthError`: último erro de autenticação registrado
+- `ticketFormUrl`: URL opcional do formulário de chamado
 
 **Limite**: ~10 MB (suficiente para centenas de mensagens).
 
@@ -124,10 +129,10 @@ Declaradas no `manifest.json`:
 APIs efetivamente usadas no código:
 
 - `chrome.tabs.query` + `sendMessage`
-- `chrome.scripting.executeScript` (fallback de injeção)
+- `chrome.scripting` (permissão disponível para evolução/fallbacks)
 - `chrome.storage.local`
 - `chrome.runtime.onMessage` (no content script)
-- `chrome.runtime.onInstalled` (no background)
+- Service worker `background.js` mínimo para inicialização/log
 
 ## Decisões Arquiteturais Importantes
 
@@ -149,23 +154,22 @@ Usamos seletores amplos + filtros agressivos de texto (`content.js:65-72`) como 
 ### Por que não existe página de Options ainda?
 
 Decisão consciente para manter o escopo mínimo.  
-Atualmente a chave é configurada via DevTools/console.  
-Futuramente recomenda-se criar `options.html` + `options.js` com formulário bonito.
+Atualmente a chave é configurada na tela de conexão React.  
+Futuramente recomenda-se criar uma página de options caso as configurações cresçam.
 
 ## Limitações Atuais da Arquitetura
 
 1. **API Key exposta** — Qualquer pessoa com acesso ao DevTools do popup consegue ler a chave armazenada.
 2. **Sem injeção automática em todas as abas** — Content script só roda nas hosts declaradas.
-3. **Ícones faltando** — A pasta `icons/` está vazia (extensão usa ícone padrão do Chrome).
-4. **Sem tratamento de quota avançado** — Apenas retry simples.
-5. **Response da IA é texto puro** — Não há parsing estruturado (JSON mode ainda não usado).
+3. **Sem tratamento de quota avançado** — Ainda não há retry/backoff dedicado para limites da API.
+4. **Response da IA é texto puro** — Não há parsing estruturado (JSON mode ainda não usado).
 
 ## Como Estender a Extensão (diretrizes)
 
 - **Novo seletor de plataforma**: edite `content.js` → `SELECTORS` e `detectPlatform()`
-- **Novo tipo de prompt**: adicione em `prompts.js` e atualize o botão no popup se necessário
-- **Melhor tratamento de erro da API**: concentre as mudanças em `api.js:104-125`
-- **Persistência entre sessões**: use o módulo `storage.js` (não acesse `chrome.storage` diretamente)
+- **Novo tipo de prompt**: adicione helpers em `src/popup/services/gemini.ts` e atualize a UI se necessário
+- **Melhor tratamento de erro da API**: concentre as mudanças em `src/popup/services/gemini.ts`
+- **Persistência entre sessões**: use `src/popup/services/storage.ts` em vez de acessar `chrome.storage` diretamente no React
 
 ---
 

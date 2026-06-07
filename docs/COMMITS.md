@@ -57,7 +57,7 @@ atualizei o codigo
 ## Fluxo Recomendado
 
 1. Faça commits pequenos e focados
-2. Sempre rode `npm run build` antes de commitar mudanças no React
+2. Sempre rode `npm run build` antes de commitar mudanças no React ou nos serviços do popup
 3. Escreva mensagens claras e descritivas
 4. Use `git commit` interativo quando possível
 
